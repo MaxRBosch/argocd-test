@@ -10,5 +10,6 @@ spec:
     targetRevision: 13.7.2
     chart: kube-prometheus-stack
 destination:
+  name: prometheus
   server: https://kubernetes.default.svc
   namespace: prometheus
