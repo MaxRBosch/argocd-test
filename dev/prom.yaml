@@ -1,21 +1,96 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: monitoring
+  name: kube-prometheus-stack
   namespace: argocd
+  labels:
+    name: kube-prometheus-stack
+    project: kube-monitoring
 spec:
-  project: default
-  source:
-    chart: kube-prometheus-stack
-    repoURL: https://prometheus-community.github.io/helm-charts
-    targetRevision: 41.6.1
+  project: "middleware"
+  source: 
+    repoURL: "https://prometheus-community.github.io/helm-charts"
+    targetRevision: "45.6.0"
+    chart: "kube-prometheus-stack"
+
+    helm:
+      releaseName: "kube-prometheus-stack"
+      values: |
+        fullnameOverride: prometheus
+        ## Create default rules for monitoring the cluster
+        ##
+        defaultRules:
+          create: true
+          rules:
+            alertmanager: true
+            etcd: false
+            configReloaders: true
+            general: true
+            k8s: true
+            kubeApiserver: false
+            kubeApiserverAvailability: false
+            kubeApiserverSlos: false
+            kubelet: false
+            kubeProxy: false
+            kubePrometheusGeneral: true
+            kubePrometheusNodeRecording: true
+            kubernetesApps: true
+            kubernetesResources: true
+            kubernetesStorage: true
+            kubernetesSystem: true
+            kubeScheduler: true
+            kubeStateMetrics: true
+            network: true
+            node: true
+            nodeExporterAlerting: true
+            nodeExporterRecording: true
+            prometheus: true
+            prometheusOperator: true
+        # EKS managed components
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        alertmanager:
+          enabled: true
+          ingress:
+            enabled: true
+            annotations:
+              kubernetes.io/ingress.class: nginx
+              nginx.ingress.kubernetes.io/auth-signin: {{ .Values.oauth.signinURL }}
+              nginx.ingress.kubernetes.io/auth-url: {{ .Values.oauth.authURL }}
+            hosts:
+            - alertmanager.{{ .Values.base_domain }}
+        grafana:
+          enabled: false
+        prometheus:
+          prometheusSpec:
+            podMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+          ingress:
+            enabled: true
+            annotations:
+              kubernetes.io/ingress.class: nginx
+              nginx.ingress.kubernetes.io/auth-signin: {{ .Values.oauth.signinURL }}
+              nginx.ingress.kubernetes.io/auth-url: {{ .Values.oauth.authURL }}
+            hosts:
+              - prometheus.{{ .Values.base_domain }}
   destination:
-    namespace: monitoring
     server: https://kubernetes.default.svc
+    namespace: "kube-monitoring"
+
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+
     syncOptions:
-      - ServerSideApply=true
-      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
